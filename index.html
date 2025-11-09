@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Manager dApp</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header Section -->
+        <header>
+            <h1>📝 Blockchain Task Manager</h1>
+            <p class="subtitle">A Decentralized Application for Managing Your Tasks</p>
+        </header>
+
+        <!-- Connection Status -->
+        <div class="status-card">
+            <h2>Connection Status</h2>
+            <p id="connectionStatus">Not Connected</p>
+            <button id="connectBtn" class="btn btn-primary">Connect MetaMask</button>
+            <p id="accountDisplay"></p>
+        </div>
+
+        <!-- Contract Information -->
+        <div class="info-card">
+            <h3>Contract Information</h3>
+            <ul>
+                <li><strong>Network:</strong> Sepolia Testnet</li>
+                <li><strong>Contract Address:</strong> <span id="contractAddress">Loading...</span></li>
+                <li><strong>Total Tasks:</strong> <span id="totalTasks">0</span></li>
+            </ul>
+            <img src="https://ethereum.org/static/4f10d2777b2d14759feb01c65b2765f7/00d43/eth-diamond-black.png" alt="Ethereum Logo" width="50">
+        </div>
+
+        <!-- Add Task Section -->
+        <div class="action-card">
+            <h2>Add New Task</h2>
+            <input type="text" id="taskInput" placeholder="Enter task description..." class="input-field">
+            <button id="addTaskBtn" class="btn btn-success">Add Task</button>
+            <p id="createStatus" class="status-message"></p>
+        </div>
+
+        <!-- View All Tasks Section -->
+        <div class="tasks-section">
+            <h2>All Tasks</h2>
+            <button id="refreshBtn" class="btn btn-secondary">Refresh Tasks</button>
+            <div id="tasksList" class="tasks-container">
+                <p class="no-tasks">No tasks yet. Add your first task!</p>
+            </div>
+        </div>
+
+        <!-- Footer with Links -->
+        <footer>
+            <p>Built with ❤️ using Solidity & Web3</p>
+            <div class="links">
+                <a href="https://sepolia.etherscan.io/address/0xd8b934580fcE35a11B58C6D73aDeE468a2833fa8" target="_blank">View on Etherscan</a> |
+                <a href="https://github.com" target="_blank">GitHub Repository</a> |
+                <a href="https://faucet.sepolia.dev/" target="_blank">Get Test ETH</a>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Include ethers.js library from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    
+    <script>
+        // Contract Configuration
+        const CONTRACT_ADDRESS = "0xd8b934580fcE35a11B58C6D73aDeE468a2833fa8";
+        
+        // Your Wallet Address
+        const YOUR_WALLET = "0x80e240eea52b3bafaf625057b9030dac9d036953";
+        
+        // Full Contract ABI from Remix
+        const CONTRACT_ABI = [
+            {
+                "inputs": [
+                    {
+                        "internalType": "string",
+                        "name": "_text",
+                        "type": "string"
+                    }
+                ],
+                "name": "add_task",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "_task_id",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "complete_task",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": false,
+                        "internalType": "uint256",
+                        "name": "task_id",
+                        "type": "uint256"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "string",
+                        "name": "text",
+                        "type": "string"
+                    }
+                ],
+                "name": "task_added",
+                "type": "event"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": false,
+                        "internalType": "uint256",
+                        "name": "task_id",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "task_completed",
+                "type": "event"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "all_tasks",
+                "outputs": [
+                    {
+                        "internalType": "string",
+                        "name": "text",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "bool",
+                        "name": "is_done",
+                        "type": "bool"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "_task_id",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "get_task",
+                "outputs": [
+                    {
+                        "internalType": "string",
+                        "name": "text",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "bool",
+                        "name": "is_done",
+                        "type": "bool"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "get_task_count",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            }
+        ];
+
+        // Global variables
+        let provider;
+        let signer;
+        let contract;
+        let userAccount;
+
+        // DOM Elements
+        const connectBtn = document.getElementById('connectBtn');
+        const addTaskBtn = document.getElementById('addTaskBtn');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const taskInput = document.getElementById('taskInput');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const accountDisplay = document.getElementById('accountDisplay');
+        const createStatus = document.getElementById('createStatus');
+        const tasksList = document.getElementById('tasksList');
+        const totalTasksSpan = document.getElementById('totalTasks');
+        const contractAddressSpan = document.getElementById('contractAddress');
+
+        // Display contract address
+        contractAddressSpan.textContent = CONTRACT_ADDRESS;
+
+        // Connect to MetaMask
+        connectBtn.addEventListener('click', async () => {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    // Request account access
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    userAccount = accounts[0];
+                    
+                    // Initialize provider and signer
+                    provider = new ethers.BrowserProvider(window.ethereum);
+                    signer = await provider.getSigner();
+                    
+                    // Check if on Sepolia network (Chain ID: 11155111)
+                    const network = await provider.getNetwork();
+                    if (network.chainId !== 11155111n) {
+                        alert('⚠️ Please switch to Sepolia Testnet in MetaMask!\n\nNetwork detected: ' + network.name);
+                        connectionStatus.textContent = '❌ Wrong Network';
+                        connectionStatus.style.color = '#ef4444';
+                        return;
+                    }
+                    
+                    // Initialize contract with full ABI
+                    contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+                    
+                    // Update UI
+                    connectionStatus.textContent = '✅ Connected to Sepolia';
+                    connectionStatus.style.color = '#10b981';
+                    accountDisplay.textContent = `Account: ${userAccount.substring(0, 6)}...${userAccount.substring(38)}`;
+                    accountDisplay.style.fontWeight = 'bold';
+                    connectBtn.textContent = 'Connected ✓';
+                    connectBtn.disabled = true;
+                    connectBtn.style.opacity = '0.6';
+                    
+                    // Load initial data
+                    await loadTaskCount();
+                    await loadAllTasks();
+                    
+                    console.log('✅ Successfully connected to contract at:', CONTRACT_ADDRESS);
+                    console.log('✅ Using account:', userAccount);
+                    
+                } catch (error) {
+                    console.error('Error connecting to MetaMask:', error);
+                    connectionStatus.textContent = '❌ Connection Failed';
+                    connectionStatus.style.color = '#ef4444';
+                    
+                    if (error.code === 4001) {
+                        alert('Connection rejected. Please approve the connection request in MetaMask.');
+                    }
+                }
+            } else {
+                alert('🦊 MetaMask is not installed!\n\nPlease install MetaMask extension to use this dApp.');
+                window.open('https://metamask.io/download/', '_blank');
+            }
+        });
+
+        // Add new task
+        addTaskBtn.addEventListener('click', async () => {
+            const taskDescription = taskInput.value.trim();
+            
+            if (!taskDescription) {
+                createStatus.textContent = '⚠️ Please enter a task description';
+                createStatus.style.color = '#f59e0b';
+                return;
+            }
+            
+            if (!contract) {
+                createStatus.textContent = '⚠️ Please connect MetaMask first';
+                createStatus.style.color = '#f59e0b';
+                return;
+            }
+            
+            try {
+                createStatus.textContent = '⏳ Adding task... Please confirm transaction in MetaMask';
+                createStatus.style.color = '#3b82f6';
+                addTaskBtn.disabled = true;
+                addTaskBtn.textContent = 'Processing...';
+                
+                // Send transaction
+                console.log('Sending transaction to add_task with text:', taskDescription);
+                const tx = await contract.add_task(taskDescription);
+                
+                createStatus.textContent = `⏳ Transaction submitted! Hash: ${tx.hash.substring(0, 10)}...`;
+                console.log('Transaction hash:', tx.hash);
+                
+                // Wait for transaction to be mined
+                const receipt = await tx.wait();
+                console.log('Transaction confirmed in block:', receipt.blockNumber);
+                
+                createStatus.textContent = '✅ Task added successfully to blockchain!';
+                createStatus.style.color = '#10b981';
+                taskInput.value = '';
+                addTaskBtn.disabled = false;
+                addTaskBtn.textContent = 'Add Task';
+                
+                // Refresh tasks list
+                await loadTaskCount();
+                await loadAllTasks();
+                
+                // Clear status after 5 seconds
+                setTimeout(() => {
+                    createStatus.textContent = '';
+                }, 5000);
+                
+            } catch (error) {
+                console.error('Error adding task:', error);
+                let errorMsg = 'Transaction failed';
+                
+                if (error.code === 'ACTION_REJECTED' || error.message.includes('user rejected')) {
+                    errorMsg = 'Transaction rejected by user';
+                } else if (error.message.includes('Task cannot be empty')) {
+                    errorMsg = 'Task cannot be empty';
+                } else if (error.message.includes('insufficient funds')) {
+                    errorMsg = 'Insufficient funds for gas';
+                }
+                
+                createStatus.textContent = '❌ ' + errorMsg;
+                createStatus.style.color = '#ef4444';
+                addTaskBtn.disabled = false;
+                addTaskBtn.textContent = 'Add Task';
+            }
+        });
+
+        // Load total task count
+        async function loadTaskCount() {
+            try {
+                const count = await contract.get_task_count();
+                totalTasksSpan.textContent = count.toString();
+                console.log('Total tasks:', count.toString());
+            } catch (error) {
+                console.error('Error loading task count:', error);
+                totalTasksSpan.textContent = 'Error';
+            }
+        }
+
+        // Load all tasks
+        async function loadAllTasks() {
+            try {
+                const taskCount = await contract.get_task_count();
+                const count = Number(taskCount);
+                
+                console.log('Loading', count, 'tasks...');
+                
+                if (count === 0) {
+                    tasksList.innerHTML = '<p class="no-tasks">No tasks yet. Add your first task!</p>';
+                    return;
+                }
+                
+                tasksList.innerHTML = '<p style="text-align: center; color: #666;">Loading tasks...</p>';
+                
+                // Small delay for better UX
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                tasksList.innerHTML = '';
+                
+                // Load all tasks
+                for (let i = 0; i < count; i++) {
+                    try {
+                        const task = await contract.get_task(i);
+                        console.log(`Task ${i}:`, task);
+                        const taskCard = createTaskCard(i, task);
+                        tasksList.appendChild(taskCard);
+                    } catch (error) {
+                        console.error(`Error loading task ${i}:`, error);
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Error loading tasks:', error);
+                tasksList.innerHTML = '<p class="error" style="color: #ef4444; text-align: center;">❌ Error loading tasks. Please refresh.</p>';
+            }
+        }
+
+        // Create task card element
+        function createTaskCard(taskId, task) {
+            const [text, is_done] = task;
+            
+            const card = document.createElement('div');
+            card.className = 'task-card';
+            if (is_done) {
+                card.classList.add('completed');
+            }
+            
+            card.innerHTML = `
+                <div class="task-header">
+                    <span class="task-id">Task #${taskId}</span>
+                    <span class="task-status">${is_done ? '✅ Completed' : '⏳ Pending'}</span>
+                </div>
+                <p class="task-description">${escapeHtml(text)}</p>
+                ${!is_done ? `<button class="btn btn-complete" onclick="completeTask(${taskId})">Mark Complete</button>` : '<p style="color: #10b981; font-weight: 600; margin-top: 10px;">Task completed! 🎉</p>'}
+            `;
+            
+            return card;
+        }
+
+        // Escape HTML to prevent XSS attacks
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Complete a task
+        async function completeTask(taskId) {
+            if (!contract) {
+                alert('Please connect MetaMask first');
+                return;
+            }
+            
+            try {
+                createStatus.textContent = `⏳ Completing task #${taskId}... Please confirm transaction`;
+                createStatus.style.color = '#3b82f6';
+                
+                console.log('Completing task:', taskId);
+                const tx = await contract.complete_task(taskId);
+                
+                createStatus.textContent = `⏳ Transaction submitted! Hash: ${tx.hash.substring(0, 10)}...`;
+                console.log('Transaction hash:', tx.hash);
+                
+                await tx.wait();
+                console.log('Task completed successfully');
+                
+                createStatus.textContent = '✅ Task completed successfully!';
+                createStatus.style.color = '#10b981';
+                
+                // Refresh tasks
+                await loadAllTasks();
+                
+                setTimeout(() => {
+                    createStatus.textContent = '';
+                }, 5000);
+                
+            } catch (error) {
+                console.error('Error completing task:', error);
+                let errorMsg = 'Failed to complete task';
+                
+                if (error.code === 'ACTION_REJECTED' || error.message.includes('user rejected')) {
+                    errorMsg = 'Transaction rejected by user';
+                } else if (error.message.includes('Invalid task ID')) {
+                    errorMsg = 'Invalid task ID';
+                } else if (error.message.includes('insufficient funds')) {
+                    errorMsg = 'Insufficient funds for gas';
+                }
+                
+                createStatus.textContent = '❌ ' + errorMsg;
+                createStatus.style.color = '#ef4444';
+            }
+        }
+
+        // Refresh tasks
+        refreshBtn.addEventListener('click', async () => {
+            if (!contract) {
+                alert('⚠️ Please connect MetaMask first');
+                return;
+            }
+            
+            refreshBtn.disabled = true;
+            refreshBtn.textContent = 'Refreshing...';
+            
+            try {
+                await loadTaskCount();
+                await loadAllTasks();
+                console.log('Tasks refreshed successfully');
+            } catch (error) {
+                console.error('Error refreshing:', error);
+            }
+            
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = 'Refresh Tasks';
+        });
+
+        // Make completeTask available globally
+        window.completeTask = completeTask;
+
+        // Listen for account changes in MetaMask
+        if (typeof window.ethereum !== 'undefined') {
+            window.ethereum.on('accountsChanged', (accounts) => {
+                console.log('Account changed:', accounts[0]);
+                if (accounts.length === 0) {
+                    console.log('No accounts found. Please connect MetaMask.');
+                }
+                location.reload();
+            });
+
+            // Listen for chain changes
+            window.ethereum.on('chainChanged', (chainId) => {
+                console.log('Network changed to:', chainId);
+                location.reload();
+            });
+        }
+
+        // Log initial setup
+        console.log('========================================');
+        console.log('🚀 Task Manager dApp Initialized');
+        console.log('📝 Contract Address:', CONTRACT_ADDRESS);
+        console.log('👤 Your Wallet:', YOUR_WALLET);
+        console.log('🌐 Network: Sepolia Testnet');
+        console.log('========================================');
+    </script>
+</body>
+</html>
