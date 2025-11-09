@@ -34,7 +34,7 @@ blockchain-task-manager/
 └── screenshots/            # Screenshots folder
     ├── 1-contract-deployment.png
     ├── 2-metamask-connection.png
-    └── 3-task-interaction.png
+    └── 3-transaction.png
 ```
 
 ## 🚀 Smart Contract Functions
@@ -213,4 +213,5 @@ This version uses a simplified contract structure:
 
 **Contract Address**: `0xd8b934580fcE35a11B58C6D73aDeE468a2833fa8`  
 **Network**: Sepolia Testnet  
+
 **Built with**: Solidity, HTML, CSS, JavaScript, ethers.js, MetaMask
